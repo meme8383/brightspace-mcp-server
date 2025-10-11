@@ -5,8 +5,13 @@ Brightspace MCP Server - Playwright-based web scraping for Purdue University
 from playwright.sync_api import sync_playwright, Browser, Page
 import time
 import json
+import os
 from typing import Dict, List, Optional
 from dataclasses import dataclass
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 
 @dataclass
@@ -69,7 +74,22 @@ class BrightspaceScraper:
             print("Navigating to Purdue Brightspace...")
             self.page.goto("https://purdue.brightspace.com")
             
+            # Wait for page to load
+            self.page.wait_for_load_state("networkidle")
+            
+            # Click on Purdue West Lafayette / Indianapolis button
+            print("Looking for Purdue institution selector...")
+            try:
+                purdue_button = self.page.wait_for_selector("text=Purdue West Lafayette / Indianapolis", timeout=5000)
+                if purdue_button:
+                    print("Clicking Purdue West Lafayette button...")
+                    purdue_button.click()
+                    self.page.wait_for_load_state("networkidle")
+            except Exception as e:
+                print(f"Note: Institution selector not found or not needed: {e}")
+            
             # Wait for login form to load
+            print("Waiting for login form...")
             self.page.wait_for_selector("#username", timeout=10000)
             
             # Fill in credentials
@@ -78,7 +98,8 @@ class BrightspaceScraper:
             self.page.fill("#password", password)
             
             # Click login button
-            self.page.click("#login-button")
+            print("Clicking login button...")
+            self.page.click("button[type='submit']")
             
             # Wait for Duo Mobile prompt
             print("Waiting for Duo Mobile authentication...")
@@ -220,9 +241,18 @@ class BrightspaceScraper:
 def main():
     """Example usage of the Brightspace scraper"""
     
-    # Configuration
-    USERNAME = "your_purdue_username"  # Replace with your username
-    PASSWORD = "your_purdue_password"  # Replace with your password
+    # Load credentials from environment variables
+    USERNAME = os.getenv("PURDUE_USERNAME")
+    PASSWORD = os.getenv("PURDUE_PASSWORD")
+    
+    if not USERNAME or not PASSWORD:
+        print("❌ Error: PURDUE_USERNAME and PURDUE_PASSWORD must be set in .env file")
+        print("Please create a .env file with:")
+        print("PURDUE_USERNAME=your_username")
+        print("PURDUE_PASSWORD=your_password")
+        return
+    
+    print(f"Using username: {USERNAME}")
     
     # Use the scraper with context manager
     with BrightspaceScraper(headless=False) as scraper:

@@ -8,23 +8,43 @@ import os
 
 
 def create_virtual_environment():
+
     """Create virtual environment for the project"""
     print("Creating virtual environment...")
-    subprocess.check_call([sys.executable, "-m", "venv", "venv"])
+    
+    # Try Python 3.12 first (more compatible with Playwright)
+    python_versions = ["python3.12", "python3.11", "python3"]
+    python_executable = None
+    
+    for python_cmd in python_versions:
+        try:
+            result = subprocess.run([python_cmd, "--version"], capture_output=True, text=True)
+            if result.returncode == 0:
+                print(f"Using {python_cmd}: {result.stdout.strip()}")
+                python_executable = python_cmd
+                break
+        except FileNotFoundError:
+            continue
+    
+    if not python_executable:
+        print("Error: No compatible Python version found. Please install Python 3.11 or 3.12")
+        sys.exit(1)
+    
+    subprocess.check_call([python_executable, "-m", "venv", "venv"])
     print("✓ Virtual environment created")
     
-    # Determine the correct activation script path
+    # Determine the correct activation script path and Python executable
     if os.name == 'nt':  # Windows
         activate_script = os.path.join("venv", "Scripts", "activate.bat")
-        python_executable = os.path.join("venv", "Scripts", "python.exe")
+        venv_python_executable = os.path.join("venv", "Scripts", "python.exe")
     else:  # Unix/Linux/macOS
         activate_script = os.path.join("venv", "bin", "activate")
-        python_executable = os.path.join("venv", "bin", "python")
+        venv_python_executable = os.path.join("venv", "bin", "python")
     
     print(f"✓ Virtual environment created at: {os.path.abspath('venv')}")
     print(f"✓ To activate: source {activate_script}" if os.name != 'nt' else f"✓ To activate: {activate_script}")
     
-    return python_executable
+    return venv_python_executable
 
 
 def install_requirements(python_executable=None):
