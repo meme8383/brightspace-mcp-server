@@ -105,9 +105,13 @@ class BrightspaceScraper:
             print("Waiting for Duo Mobile authentication...")
             print("Please approve the login request on your Duo Mobile app...")
             
-            # Wait for successful authentication (adjust selector as needed)
+            # Wait for successful authentication by checking for Brightspace homepage
             try:
-                self.page.wait_for_selector(".duo-success", timeout=60000)
+                # Wait for navigation away from Duo page to Brightspace
+                self.page.wait_for_function(
+                    "() => window.location.href.includes('/d2l/home')",
+                    timeout=60000
+                )
                 print("Duo Mobile authentication successful!")
                 return True
             except Exception as e:
@@ -127,37 +131,101 @@ class BrightspaceScraper:
         """
         try:
             # Navigate to home page
+            print("Navigating to homepage...")
             self.page.goto("https://purdue.brightspace.com/d2l/home")
             
-            # Wait for courses to load
-            self.page.wait_for_selector(".course-title", timeout=10000)
+            # Wait for the My Courses widget to load (it's a web component)
+            print("Waiting for My Courses widget to load...")
+            self.page.wait_for_selector("d2l-my-courses", timeout=10000)
             
-            # Extract course information
+            # Wait a bit more for the courses to render inside the component
+            time.sleep(3)
+            
+            # The courses are loaded dynamically, so we need to wait for them
+            # Try multiple possible selectors based on the actual HTML structure
+            course_selectors = [
+                "d2l-enrollment-card .d2l-card-container",  # Main course containers
+                ".d2l-card-container",  # Course card containers
+                "d2l-enrollment-card a[href*='/d2l/home/']",  # Course links
+                "a[href*='/d2l/home/']",  # Any course links
+            ]
+            
             courses = []
-            course_elements = self.page.query_selector_all(".course-title")
+            for selector in course_selectors:
+                print(f"Trying selector: {selector}")
+                course_elements = self.page.query_selector_all(selector)
+                
+                if course_elements:
+                    print(f"Found {len(course_elements)} course elements with {selector}")
+                    
+                    for element in course_elements:
+                        try:
+                            # If this is a link element, use it directly
+                            if element.evaluate("el => el.tagName.toLowerCase()") == "a":
+                                link_element = element
+                            else:
+                                # Otherwise, look for a link inside this element
+                                link_element = element.query_selector("a[href*='/d2l/home/']")
+                            
+                            if not link_element:
+                                continue
+                            
+                            # Get course URL
+                            url = link_element.get_attribute("href")
+                            if not url:
+                                continue
+                            
+                            # Get course name from the span inside the link
+                            name_span = link_element.query_selector(".d2l-card-link-text")
+                            if name_span:
+                                name = name_span.text_content().strip()
+                            else:
+                                # Fallback: get from link text or title
+                                name = (
+                                    link_element.get_attribute("title") or
+                                    link_element.get_attribute("aria-label") or
+                                    link_element.text_content()
+                                )
+                                if name:
+                                    name = name.strip()
+                            
+                            # Extract course code from name
+                            course_code = self._extract_course_code(name) if name else "Unknown"
+                            
+                            if name and name != "":
+                                courses.append(Course(
+                                    name=name,
+                                    code=course_code,
+                                    instructor="",
+                                    url=url
+                                ))
+                                print(f"Found course: {name} ({course_code})")
+                        except Exception as e:
+                            print(f"Error extracting course from element: {e}")
+                            continue
+                    
+                    # If we found courses, don't try other selectors
+                    if courses:
+                        break
             
-            for element in course_elements:
-                try:
-                    name = element.text_content().strip()
-                    url = element.get_attribute("href")
-                    
-                    # Extract course code from name if possible
-                    course_code = self._extract_course_code(name)
-                    
-                    courses.append(Course(
-                        name=name,
-                        code=course_code,
-                        instructor="",  # Would need additional scraping
-                        url=url or ""
-                    ))
-                except Exception as e:
-                    print(f"Error extracting course: {e}")
-                    continue
+            # If no courses found with any selector, take a screenshot for debugging
+            if not courses:
+                print("No courses found! Taking screenshot...")
+                self.page.screenshot(path="homepage_debug.png")
+                print("Screenshot saved as homepage_debug.png")
+                print("Printing page HTML to debug...")
+                # Get the inner HTML of the my-courses widget
+                my_courses = self.page.query_selector("d2l-my-courses")
+                if my_courses:
+                    print(f"My Courses widget found, but no course elements inside")
+                else:
+                    print("My Courses widget not found!")
             
             return courses
             
         except Exception as e:
             print(f"Error getting courses: {e}")
+            self.page.screenshot(path="error_getting_courses.png")
             return []
     
     def get_assignments(self, course_url: str) -> List[Assignment]:
@@ -171,6 +239,9 @@ class BrightspaceScraper:
             List[Assignment]: List of assignment objects
         """
         try:
+            # Ensure course_url is a full URL
+            if not course_url.startswith("http"):
+                course_url = f"https://purdue.brightspace.com{course_url}"
             self.page.goto(course_url)
             
             # Navigate to assignments (adjust selector as needed)

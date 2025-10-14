@@ -35,8 +35,9 @@ test-results/
 playwright-report/
 playwright/.cache/
 
-# Screenshots and logs
+# Screenshots and logs (but allow documentation images)
 *.png
+!img/*.png
 *.jpg
 *.jpeg
 *.log
@@ -54,4 +55,8 @@ Thumbs.db
 
 # Data files
 brightspace_data.json
-*.json
+
+# But allow configuration examples
+!claude_desktop_config.example.json
+!requirements.txt
+!**/package.json
