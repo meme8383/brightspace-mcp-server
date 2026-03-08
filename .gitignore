@@ -3,10 +3,11 @@ venv/
 env/
 ENV/
 
-# Environment Variables
+# Environment Variables & Secrets
 .env
 .env.local
 .env.*.local
+.cookies.json
 
 # Python
 __pycache__/
@@ -55,6 +56,7 @@ Thumbs.db
 
 # Data files
 brightspace_data.json
+.cache/
 
 # But allow configuration examples
 !claude_desktop_config.example.json
